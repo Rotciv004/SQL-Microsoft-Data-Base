@@ -1,2 +1,2 @@
 # SQL-Microsoft-Data-Base
-A Microsoft SQL Database project for managing a duty-free shop. It includes tables and queries for handling products, customers, categories, suppliers, employees, shelves, warehouses, orders, and order items.
+This repository contains a Microsoft SQL Database project focused on managing a duty-free shop. The database is designed to handle essential operations, including managing products, customers, categories, suppliers, employees, shelves, warehouses, orders, and order items. It provides a structured schema and queries for efficient data organization and seamless workflow management.
