@@ -4,7 +4,6 @@ CREATE DATABASE DutyFreeShop;
 USE DutyFreeShop;
 
 
-
 -- Table for categories of products
 CREATE TABLE categories (
     category_id INT PRIMARY KEY,
@@ -400,83 +399,851 @@ ORDER BY discounted_price ASC;
 
 
 
+-- lab 3
 
 
--- Procedura pentru a adăuga un test nou
-CREATE PROCEDURE AddTest (
-    test_name VARCHAR(255),
-    description TEXT
-)
+-- modify
+GO
+CREATE OR ALTER PROCEDURE setCustomerPhoneToBIGINT AS
 BEGIN
-    INSERT INTO Tests (Name, Description)
-    VALUES (test_name, description);
+    ALTER TABLE customers ALTER COLUMN phone BIGINT;
+    PRINT 'Changed column type of phone to BIGINT in customers';
 END;
 
--- Procedura pentru a adăuga tabele implicate într-un test
-CREATE PROCEDURE AddTestTable (
-    test_id INT,
-    table_id INT,
-    position INT,
-    no_of_rows INT
-)
+GO
+CREATE OR ALTER PROCEDURE revertCustomerPhoneToVARCHAR AS
 BEGIN
-    INSERT INTO TestTables (TestID, TableID, NoOfRows, Position)
-    VALUES (test_id, table_id, no_of_rows, position);
+    ALTER TABLE customers ALTER COLUMN phone VARCHAR(15);
+    PRINT 'Reverted column type of phone to VARCHAR in customers';
 END;
 
--- Procedura pentru a adăuga o vizualizare într-un test
-CREATE PROCEDURE AddTestView (
-    test_id INT,
-    view_id INT
-)
+
+EXEC setCustomerPhoneToBIGINT;
+EXEC revertCustomerPhoneToVARCHAR;
+
+select * from employees
+-- add/delete 
+GO
+CREATE OR ALTER PROCEDURE addEmployeeAgeColumn AS
 BEGIN
-    INSERT INTO TestViews (TestID, ViewID)
-    VALUES (test_id, view_id);
+    -- Verifică dacă coloana 'Age' nu există deja
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'employees' AND COLUMN_NAME = 'Age'
+    )
+    BEGIN
+        ALTER TABLE employees ADD Age INT;
+        PRINT 'Added Age column to employees';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Column Age already exists in employees';
+    END
 END;
 
--- Procedura pentru a rula un test
-CREATE PROCEDURE RunTest (
-    test_id INT
-)
+
+GO
+CREATE OR ALTER PROCEDURE removeEmployeeAgeColumn AS
 BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE table_id INT;
-    DECLARE no_of_rows INT;
-    DECLARE cur CURSOR FOR
-        SELECT TableID, NoOfRows FROM TestTables WHERE TestID = test_id ORDER BY Position DESC;
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-
-    -- Șterge datele din tabele în ordinea specificată
-    OPEN cur;
-    read_loop: LOOP
-        FETCH cur INTO table_id, no_of_rows;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-        SET @sql = CONCAT('DELETE FROM ', (SELECT Name FROM Tables WHERE TableID = table_id));
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END LOOP;
-    CLOSE cur;
-
-    -- Inserează date în tabele în ordinea inversă
-    OPEN cur;
-    read_loop: LOOP
-        FETCH cur INTO table_id, no_of_rows;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-        SET @sql = CONCAT('INSERT INTO ', (SELECT Name FROM Tables WHERE TableID = table_id), ' SELECT * FROM ', (SELECT Name FROM Tables WHERE TableID = table_id), '_backup LIMIT ', no_of_rows);
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END LOOP;
-    CLOSE cur;
-
-    -- Evaluare vizualizări
-    INSERT INTO TestRuns (TestID, StartAt) VALUES (test_id, NOW());
-    SET @run_id = LAST_INSERT_ID();
-    INSERT INTO TestRunViews (TestRunID, ViewID, StartAt)
-    SELECT @run_id, ViewID, NOW() FROM TestViews WHERE TestID = test_id;
+    -- Verifică dacă coloana 'Age' există înainte de a încerca să o ștergi
+    IF EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'employees' AND COLUMN_NAME = 'Age'
+    )
+    BEGIN
+        ALTER TABLE employees DROP COLUMN Age;
+        PRINT 'Removed Age column from employees';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Column Age does not exist in employees';
+    END
 END;
+
+
+EXEC addEmployeeAgeColumn;
+EXEC removeEmployeeAgeColumn;
+
+
+
+-- add/Remove A default Constraint
+go
+CREATE OR ALTER PROCEDURE addHireDateDefault AS
+BEGIN
+    -- Variabilă pentru numele constrângerii existente
+    DECLARE @ConstraintName NVARCHAR(255);
+
+    -- Caută numele constrângerii implicite legate de hire_date
+    SELECT @ConstraintName = name
+    FROM sys.default_constraints
+    WHERE parent_object_id = OBJECT_ID('employees') AND parent_column_id = (
+        SELECT column_id
+        FROM sys.columns
+        WHERE object_id = OBJECT_ID('employees') AND name = 'hire_date'
+    );
+
+    -- Dacă constrângerea există, o elimină
+    IF @ConstraintName IS NOT NULL
+    BEGIN
+        EXEC('ALTER TABLE employees DROP CONSTRAINT ' + @ConstraintName);
+        PRINT 'Dropped existing default constraint on hire_date';
+    END;
+
+    -- Adaugă constrângerea implicită
+    ALTER TABLE employees ADD CONSTRAINT DF_HireDate DEFAULT GETDATE() FOR hire_date;
+    PRINT 'Added default constraint for hire_date column';
+END;
+
+
+
+go
+CREATE OR ALTER PROCEDURE removeHireDateDefault AS
+BEGIN
+    ALTER TABLE employees DROP CONSTRAINT DF_HireDate
+    PRINT 'Removed default constraint for hire_date column'
+END
+
+EXEC addHireDateDefault;
+EXEC removeHireDateDefault;
+
+
+-- add/Remove a primaty key
+go
+CREATE OR ALTER PROCEDURE addPrimaryKeyToDepartments AS
+BEGIN
+    -- Variabilă pentru a stoca numele cheii primare
+    DECLARE @PrimaryKeyName NVARCHAR(255);
+
+    -- Verifică dacă există o cheie primară pe tabela 'departments'
+    SELECT @PrimaryKeyName = name
+    FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID('departments') AND type = 'PK';
+
+    -- Dacă nu există o cheie primară, o adaugă
+    IF @PrimaryKeyName IS NULL
+    BEGIN
+        ALTER TABLE departments ADD CONSTRAINT PK_departments PRIMARY KEY (department_id);
+        PRINT 'Added primary key to departments';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Primary key already exists on departments';
+    END
+END;
+
+
+
+GO
+CREATE OR ALTER PROCEDURE removePrimaryKeyFromDepartments AS
+BEGIN
+    -- Variabile pentru numele cheilor
+    DECLARE @PrimaryKeyName NVARCHAR(255);
+    DECLARE @ForeignKeyName NVARCHAR(255);
+    DECLARE @SQL NVARCHAR(MAX);
+
+    -- Găsește numele cheii primare
+    SELECT @PrimaryKeyName = name
+    FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID('departments') AND type = 'PK';
+
+    -- Găsește numele cheii externe care depinde de cheia primară
+    SELECT @ForeignKeyName = name
+    FROM sys.foreign_keys
+    WHERE referenced_object_id = OBJECT_ID('departments');
+
+    -- Elimină cheia externă dacă există
+    IF @ForeignKeyName IS NOT NULL
+    BEGIN
+        SET @SQL = 'ALTER TABLE employees DROP CONSTRAINT ' + QUOTENAME(@ForeignKeyName);
+        EXEC sp_executesql @SQL;
+        PRINT 'Dropped foreign key constraint: ' + @ForeignKeyName;
+    END
+
+    -- Elimină cheia primară dacă există
+    IF @PrimaryKeyName IS NOT NULL
+    BEGIN
+        SET @SQL = 'ALTER TABLE departments DROP CONSTRAINT ' + QUOTENAME(@PrimaryKeyName);
+        EXEC sp_executesql @SQL;
+        PRINT 'Removed primary key from departments';
+    END
+    ELSE
+    BEGIN
+        PRINT 'No primary key exists on departments';
+    END
+END;
+
+
+
+
+EXEC addPrimaryKeyToDepartments;
+EXEC removePrimaryKeyFromDepartments;
+
+
+
+
+-- add/remove a Candidate Key
+go
+CREATE OR ALTER PROCEDURE addCustomerEmailUnique AS
+BEGIN
+    -- Variabilă pentru a stoca numele constrângerii unice
+    DECLARE @ConstraintName NVARCHAR(255);
+
+    -- Caută constrângerea unică pentru coloana 'email' în tabelul 'customers'
+    SELECT @ConstraintName = name
+    FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID('customers') AND type = 'UQ' AND name = 'UQ_CustomerEmail';
+
+    -- Dacă constrângerea nu există, o adaugă
+    IF @ConstraintName IS NULL
+    BEGIN
+        ALTER TABLE customers ADD CONSTRAINT UQ_CustomerEmail UNIQUE (email);
+        PRINT 'Added unique constraint to email column in customers';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Unique constraint UQ_CustomerEmail already exists on customers';
+    END
+END;
+
+
+
+go
+CREATE OR ALTER PROCEDURE removeCustomerEmailUnique AS
+BEGIN
+    -- Variabilă pentru a stoca numele constrângerii unice
+    DECLARE @ConstraintName NVARCHAR(255);
+
+    -- Caută constrângerea unică pentru coloana 'email' în tabelul 'customers'
+    SELECT @ConstraintName = name
+    FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID('customers') AND type = 'UQ' AND name = 'UQ_CustomerEmail';
+
+    -- Dacă constrângerea există, o elimină
+    IF @ConstraintName IS NOT NULL
+    BEGIN
+        ALTER TABLE customers DROP CONSTRAINT UQ_CustomerEmail;
+        PRINT 'Removed unique constraint from email column in customers';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Unique constraint UQ_CustomerEmail does not exist on customers';
+    END
+END;
+
+
+
+EXEC addCustomerEmailUnique;
+EXEC removeCustomerEmailUnique;
+
+
+
+
+-- Add/remove a foreign key
+go
+CREATE OR ALTER PROCEDURE addProductCategoryForeignKey AS
+BEGIN
+    ALTER TABLE products ADD CONSTRAINT FK_ProductCategory FOREIGN KEY (category_id) REFERENCES categories(category_id)
+    PRINT 'Added foreign key between products and categories'
+END
+
+
+go
+CREATE OR ALTER PROCEDURE removeProductCategoryForeignKey AS
+BEGIN
+    ALTER TABLE products DROP CONSTRAINT FK_ProductCategory
+    PRINT 'Removed foreign key between products and categories'
+END
+
+EXEC addProductCategoryForeignKey;
+EXEC removeProductCategoryForeignKey;
+
+
+
+-- Create/Drop a Table
+go
+CREATE OR ALTER PROCEDURE createCustomerBackupTable AS
+BEGIN
+    CREATE TABLE CustomerBackup (
+        customer_id INT PRIMARY KEY,
+        first_name VARCHAR(255),
+        last_name VARCHAR(255),
+        email VARCHAR(255),
+        phone VARCHAR(15)
+    )
+    PRINT 'Created CustomerBackup table'
+END
+
+go
+CREATE OR ALTER PROCEDURE dropCustomerBackupTable AS
+BEGIN
+    -- Verifică dacă tabelul 'CustomerBackup' există
+    IF EXISTS (
+        SELECT 1 -- nu tinem cont de datele din tabel doar vrem sa verificam existenta tabelelor
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = 'CustomerBackup' AND TABLE_SCHEMA = 'dbo'
+    )
+    BEGIN
+        DROP TABLE CustomerBackup;
+        PRINT 'Dropped CustomerBackup table';
+    END
+    ELSE
+    BEGIN
+        PRINT 'CustomerBackup table does not exist';
+    END
+END;
+
+
+
+EXEC createCustomerBackupTable;
+EXEC dropCustomerBackupTable;
+
+
+
+--Version Setup
+GO
+CREATE OR ALTER PROCEDURE dropVersioningTable AS
+BEGIN
+    -- Verifică dacă tabelul 'VersioningTable' există
+    IF EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = 'VersioningTable' AND TABLE_SCHEMA = 'dbo'
+    )
+    BEGIN
+        DROP TABLE VersioningTable;
+        PRINT 'Dropped VersioningTable';
+    END
+    ELSE
+    BEGIN
+        PRINT 'VersioningTable does not exist';
+    END
+END;
+
+
+GO
+CREATE OR ALTER PROCEDURE createVersioningTable AS
+BEGIN
+    -- Verifică dacă tabelul 'VersioningTable' există
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = 'VersioningTable' AND TABLE_SCHEMA = 'dbo'
+    )
+    BEGIN
+        CREATE TABLE VersioningTable (
+            Current_Procedure VARCHAR(100),
+            Previous_Procedure VARCHAR(100),
+            versionTO INT UNIQUE
+        );
+        PRINT 'Created VersioningTable';
+    END
+    ELSE
+    BEGIN
+        PRINT 'VersioningTable already exists';
+    END
+END;
+
+
+GO
+CREATE OR ALTER PROCEDURE insertIntoVersioningTable AS
+BEGIN
+    -- Inserează datele dacă tabelul există
+    IF EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = 'VersioningTable' AND TABLE_SCHEMA = 'dbo'
+    )
+    BEGIN
+        -- Șterge înregistrările existente pentru a evita duplicările (opțional)
+        DELETE FROM VersioningTable;
+
+        -- Inserează valorile specificate
+        INSERT INTO VersioningTable (Current_Procedure, Previous_Procedure, versionTO)
+		VALUES
+		('setCustomerPhoneToBIGINT', 'revertCustomerPhoneToVARCHAR', 1),       -- Modifică telefonul în customers
+		('addEmployeeAgeColumn', 'removeEmployeeAgeColumn', 2),               -- Adaugă/șterge coloana Age
+		('addHireDateDefault', 'removeHireDateDefault', 3),                   -- Adaugă/șterge constrângerea implicită pe hire_date
+		('addPrimaryKeyToDepartments', 'removePrimaryKeyFromDepartments', 4), -- Adaugă/șterge cheia primară în departments
+		('addCustomerEmailUnique', 'removeCustomerEmailUnique', 5),           -- Adaugă/șterge constrângerea unică pe email
+		('addProductCategoryForeignKey', 'removeProductCategoryForeignKey', 6), -- Adaugă/șterge cheia externă între products și categories
+		('createCustomerBackupTable', 'dropCustomerBackupTable', 7);          -- Creează/șterge tabelul de backup CustomerBackup
+
+
+        PRINT 'Inserted data into VersioningTable';
+    END
+    ELSE
+    BEGIN
+        PRINT 'VersioningTable does not exist. Cannot insert data.';
+    END
+END;
+
+EXEC dropVersioningTable;
+EXEC createVersioningTable;
+EXEC insertIntoVersioningTable;
+
+
+CREATE TABLE CurrentVersion (
+    currentVersion INT DEFAULT 0
+)
+
+INSERT INTO CurrentVersion VALUES (0)
+
+GO
+CREATE OR ALTER PROCEDURE goToVersion(@version INT)
+AS
+BEGIN
+    DECLARE @currentVersion INT;
+    DECLARE @currentProcedure NVARCHAR(255); -- Variabilă pentru stocarea numelui procedurii
+
+    -- Verificare validitate versiune
+    IF @version < 0 OR @version > 7   
+    BEGIN
+        RAISERROR('Invalid version number!', 17, 1);
+        RETURN;
+    END;
+
+    -- Obține versiunea curentă
+    SELECT @currentVersion = currentVersion FROM CurrentVersion;
+
+    -- Evită executarea redundantă
+    IF @currentVersion = @version
+    BEGIN
+        PRINT 'Already at version ' + CAST(@version AS NVARCHAR(10));
+        RETURN;
+    END;
+
+    -- Dacă mergem înainte
+    IF @version > @currentVersion
+    BEGIN
+        WHILE @currentVersion < @version
+        BEGIN
+            -- Obține procedura curentă
+            SELECT @currentProcedure = Current_Procedure
+            FROM VersioningTable
+            WHERE versionTO = @currentVersion + 1;
+
+            -- Execută procedura curentă
+            EXEC sp_executesql @currentProcedure;
+
+            -- Actualizează versiunea curentă
+            SET @currentVersion = @currentVersion + 1;
+        END;
+    END
+    -- Dacă mergem înapoi
+    ELSE IF @version < @currentVersion
+    BEGIN
+        WHILE @currentVersion > @version
+        BEGIN
+            -- Obține procedura anterioară
+            SELECT @currentProcedure = Previous_Procedure
+            FROM VersioningTable
+            WHERE versionTO = @currentVersion;
+
+            -- Execută procedura anterioară
+            EXEC sp_executesql @currentProcedure;
+
+            -- Actualizează versiunea curentă
+            SET @currentVersion = @currentVersion - 1;
+        END;
+    END;
+
+    -- Actualizează tabelul CurrentVersion
+    UPDATE CurrentVersion SET currentVersion = @currentVersion;
+
+    -- Confirmă schimbarea versiunii
+    PRINT 'Current version updated to: ' + CAST(@currentVersion AS NVARCHAR(10));
+END;
+
+
+
+
+
+SELECT * 
+FROM sys.objects 
+WHERE object_id = OBJECT_ID(N'goToVersion') 
+  AND type IN (N'P', N'PC');
+
+
+UPDATE CurrentVersion SET currentVersion = 0;
+
+EXEC goToVersion 1;
+EXEC goToVersion 0;
+EXEC goToVersion 7;
+
+
+
+
+
+
+--lab 4
+
+SELECT 
+    fk.name AS foreign_key_name,
+    tp.name AS parent_table,
+    cp.name AS parent_column,
+    tr.name AS referenced_table,
+    cr.name AS referenced_column
+FROM 
+    sys.foreign_keys AS fk
+INNER JOIN 
+    sys.foreign_key_columns AS fkc ON fk.object_id = fkc.constraint_object_id
+INNER JOIN 
+    sys.tables AS tp ON fkc.parent_object_id = tp.object_id
+INNER JOIN 
+    sys.columns AS cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id
+INNER JOIN 
+    sys.tables AS tr ON fkc.referenced_object_id = tr.object_id
+INNER JOIN 
+    sys.columns AS cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
+WHERE 
+    tr.name = 'TestRunsTables';
+
+ALTER TABLE TestRunTables DROP CONSTRAINT FK__TestRunTa__test___1DD065E0;
+ALTER TABLE TestRunViews DROP CONSTRAINT FK__TestRunVi__test___21A0F6C4;
+
+
+drop table TestRunViews;
+
+
+-- Tabele pentru gestionarea testelor
+CREATE TABLE TestRuns (
+    TestRunID INT PRIMARY KEY IDENTITY(1, 1),
+    Description NVARCHAR(2000),
+    StartAt DATETIME2,
+    EndAt DATETIME2
+);
+
+CREATE TABLE TestTables (
+    TestID INT NOT NULL,
+    TableID NVARCHAR(255),
+    NoOfRows INT NOT NULL,
+    Position INT NOT NULL,
+    PRIMARY KEY (TestID, TableID)
+);
+
+CREATE TABLE TestViews (
+    TestID INT NOT NULL,
+    ViewName NVARCHAR(255),
+    PRIMARY KEY (TestID, ViewName)
+);
+
+CREATE TABLE Tests (
+    TestID INT PRIMARY KEY IDENTITY(1, 1),
+    Name NVARCHAR(255) NOT NULL
+);
+
+
+
+CREATE OR ALTER PROCEDURE AddToTestTables (
+    @TestID INT,
+    @TableName NVARCHAR(255),
+    @NoOfRows INT,
+    @Position INT
+)
+AS
+BEGIN
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName)
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM TestTables WHERE TableID = @TableName AND TestID = @TestID)
+        BEGIN
+            INSERT INTO TestTables (TestID, TableID, NoOfRows, Position)
+            VALUES (@TestID, @TableName, @NoOfRows, @Position);
+            PRINT CONCAT('Table ', @TableName, ' added to TestTables.');
+        END
+        ELSE
+        BEGIN
+            PRINT CONCAT('Table ', @TableName, ' already exists in TestTables.');
+        END
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('Table ', @TableName, ' does not exist in the database.');
+    END
+END;
+GO
+
+
+
+
+
+CREATE OR ALTER PROCEDURE AddToTestViews (
+    @TestID INT,
+    @ViewName NVARCHAR(255)
+)
+AS
+BEGIN
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = @ViewName)
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM TestViews WHERE ViewName = @ViewName AND TestID = @TestID)
+        BEGIN
+            INSERT INTO TestViews (TestID, ViewName)
+            VALUES (@TestID, @ViewName);
+            PRINT CONCAT('View ', @ViewName, ' added to TestViews.');
+        END
+        ELSE
+        BEGIN
+            PRINT CONCAT('View ', @ViewName, ' already exists in TestViews.');
+        END
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('View ', @ViewName, ' does not exist in the database.');
+    END
+END;
+GO
+
+
+
+
+CREATE OR ALTER PROCEDURE AddToTests (
+    @TestName NVARCHAR(255)
+)
+AS
+BEGIN
+    IF EXISTS (SELECT 1 FROM Tests WHERE Name = @TestName)
+    BEGIN
+        PRINT CONCAT('Test ', @TestName, ' already exists.');
+    END
+    ELSE
+    BEGIN
+        INSERT INTO Tests (Name)
+        VALUES (@TestName);
+        PRINT CONCAT('Test ', @TestName, ' added successfully.');
+    END
+END;
+GO
+
+
+
+
+
+CREATE OR ALTER PROCEDURE RunTest (
+    @TestName NVARCHAR(255)
+)
+AS
+BEGIN
+    DECLARE @TestID INT, @TableID NVARCHAR(255), @ViewName NVARCHAR(255);
+    DECLARE @StartAt DATETIME2, @EndAt DATETIME2, @Description NVARCHAR(2000);
+    DECLARE @TestRunID INT;
+
+    SELECT @TestID = TestID FROM Tests WHERE Name = @TestName;
+    IF @TestID IS NULL
+    BEGIN
+        PRINT CONCAT('Test ', @TestName, ' not found.');
+        RETURN;
+    END
+
+    -- Creare test run
+    SET @StartAt = SYSDATETIME();
+    SET @Description = CONCAT('Test results for: ', @TestName);
+    INSERT INTO TestRuns (Description, StartAt) 
+    VALUES (@Description, @StartAt);
+
+    SELECT @TestRunID = SCOPE_IDENTITY();
+
+    -- Procesare tabele
+    IF EXISTS (SELECT 1 FROM TestTables WHERE TestID = @TestID)
+    BEGIN
+        DECLARE TableCursor CURSOR FOR
+            SELECT TableID FROM TestTables WHERE TestID = @TestID ORDER BY Position;
+
+        OPEN TableCursor;
+        FETCH NEXT FROM TableCursor INTO @TableID;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            PRINT CONCAT('Processing table: ', @TableID);
+            FETCH NEXT FROM TableCursor INTO @TableID;
+        END
+
+        CLOSE TableCursor;
+        DEALLOCATE TableCursor;
+    END
+    ELSE
+    BEGIN
+        PRINT 'No tables associated with this test.';
+    END
+
+    -- Procesare vizualizări
+    IF EXISTS (SELECT 1 FROM TestViews WHERE TestID = @TestID)
+    BEGIN
+        DECLARE ViewCursor CURSOR FOR
+            SELECT ViewName FROM TestViews WHERE TestID = @TestID;
+
+        OPEN ViewCursor;
+        FETCH NEXT FROM ViewCursor INTO @ViewName;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            PRINT CONCAT('Executing view: ', @ViewName);
+            EXEC('SELECT * FROM ' + @ViewName);
+            FETCH NEXT FROM ViewCursor INTO @ViewName;
+        END
+
+        CLOSE ViewCursor;
+        DEALLOCATE ViewCursor;
+    END
+    ELSE
+    BEGIN
+        PRINT 'No views associated with this test.';
+    END
+
+    -- Finalizare test run
+    SET @EndAt = SYSDATETIME();
+    UPDATE TestRuns SET EndAt = @EndAt WHERE TestRunID = @TestRunID;
+    PRINT CONCAT('Test ', @TestName, ' completed.');
+END;
+GO
+
+
+
+
+
+
+
+CREATE OR ALTER VIEW CategoriesView AS
+SELECT * FROM categories;
+GO
+
+
+EXEC AddToTests 'Test Categories';
+DECLARE @TestID INT;
+SELECT @TestID = TestID FROM Tests WHERE Name = 'Test Categories';
+
+EXEC AddToTestTables @TestID, 'categories', 100, 1;
+EXEC AddToTestViews @TestID, 'CategoriesView';
+
+
+EXEC RunTest 'Test Categories';
+
+
+
+CREATE OR ALTER VIEW ProductsAndSuppliers AS
+SELECT p.product_name, s.supplier_name
+FROM products p
+INNER JOIN suppliers s ON p.supplier_id = s.supplier_id;
+GO
+
+
+EXEC AddToTests 'Test Products and Suppliers';
+DECLARE @TestID INT;
+SELECT @TestID = TestID FROM Tests WHERE Name = 'Test Products and Suppliers';
+
+EXEC AddToTestTables @TestID, 'products', 50, 2;
+EXEC AddToTestTables @TestID, 'suppliers', 20, 3;
+EXEC AddToTestViews @TestID, 'ProductsAndSuppliers';
+
+
+EXEC RunTest 'Test Products and Suppliers';
+
+
+SELECT * FROM TestRuns;
+SELECT * FROM TestTables;
+SELECT * FROM TestViews;
+
+
+
+
+
+
+-- tema 5
+
+
+
+CREATE TABLE Ta (
+    aid INT PRIMARY KEY, -- clustered index
+    a2 INT UNIQUE	-- index unic
+);
+
+
+--inseram valori pentru Ta
+DECLARE @i INT = 1;
+WHILE @i <= 1000
+BEGIN
+    INSERT INTO Ta (aid, a2)
+    VALUES (@i, @i * 10); 
+    SET @i = @i + 1;
+END;
+
+SELECT COUNT(*) AS TotalRows_Ta FROM Ta;
+SELECT * FROM Ta;
+
+CREATE TABLE Tb (
+    bid INT PRIMARY KEY, --clustered index
+    b2 INT
+);
+
+--inseram date in Tb
+DECLARE @j INT = 1;
+WHILE @j <= 1000
+BEGIN
+    INSERT INTO Tb (bid, b2)
+    VALUES (@j, @j * 5); 
+    SET @j = @j + 1;
+END;
+
+SELECT COUNT(*) AS TotalRows_Tb FROM Tb;
+SELECT * FROM Tb;
+
+
+CREATE TABLE Tc (
+    cid INT PRIMARY KEY, --clustered index
+    aid INT,
+    bid INT,
+    FOREIGN KEY (aid) REFERENCES Ta(aid),
+    FOREIGN KEY (bid) REFERENCES Tb(bid)
+);
+-- inseram date in Tc
+DECLARE @k INT = 1;
+WHILE @k <= 1000
+BEGIN
+    INSERT INTO Tc (cid, aid, bid)
+    VALUES (@k, @k, @k); 
+    SET @k = @k + 1;
+END;
+
+
+SELECT COUNT(*) AS TotalRows_Tc FROM Tc;
+SELECT * FROM Tb;
+
+
+--clustered index creat implicit prin declarare in tabela Ta
+SELECT * FROM Ta ORDER BY aid;
+
+--clustered index seek pe o cautarte specifica in tabelul Ta
+SELECT * FROM Ta WHERE aid = 2;
+
+--non clustered index facut pe tabela Ta pe coloana a2
+CREATE NONCLUSTERED INDEX IDX_Ta_a2 ON Ta(a2);
+
+SELECT * FROM Ta WHERE a2 BETWEEN 100 AND 300;
+
+--non clustered index pe o valoare specifica
+SELECT * FROM Ta WHERE a2 = 200;
+
+
+
+--tabela Tb
+
+SELECT * FROM Tb WHERE b2 = 500;
+
+
+CREATE NONCLUSTERED INDEX IDX_Tb_b2 ON Tb(b2);
+SELECT * FROM Tb WHERE b2 = 500;
+
+
+-- view care uneste Ta cu Tc
+CREATE OR ALTER VIEW V_Ta_Tc AS
+SELECT Ta.aid, Ta.a2, Tc.cid, Tc.bid
+FROM Ta
+INNER JOIN Tc ON Ta.aid = Tc.aid;
+
+SELECT * FROM V_Ta_Tc ORDER BY a2;
+
+
+CREATE NONCLUSTERED INDEX IDX_Tc_aid ON Tc(aid);
+CREATE NONCLUSTERED INDEX IDX_Tc_bid ON Tc(bid);
+
+SELECT * FROM V_Ta_Tc ORDER BY a2;
